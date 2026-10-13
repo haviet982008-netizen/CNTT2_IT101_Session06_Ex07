@@ -1,0 +1,28 @@
+﻿BÀI TẬP VỀ NHÀ: DEBUG SHELL SCRIPT XỬ LÝ LOG CRITICAL
+Phần 1: Phân tích lỗi
+* Nguyên nhân chính: Đoạn code gốc sử dụng tham số -CaseSensitive kết hợp với chuỗi tìm kiếm "critical" (viết thường), trong khi tệp nhật ký server.log lại ghi các từ khóa lỗi bằng chữ hoa (CRITICAL).
+* Hệ quả của lệnh: Do lệnh Select-String yêu cầu khớp chính xác từng ký tự hoa/thường khi có cờ -CaseSensitive, nó đã bỏ qua toàn bộ các dòng log lỗi thực tế.
+* Kết quả thực tế: Tệp daily_critical.txt chỉ nhận được dòng tiêu đề và số đếm tổng số dòng là 2, khiến tệp gần như trống rỗng và không trích xuất được nội dung lỗi nào.
+Phần 2: Sửa lỗi và kiểm thử
+1. Đoạn script đã được sửa đúng
+# 1. Khối header: Dừng ngay lập tức khi gặp lỗi phát sinh
+$erroractionpreference = "Stop"
+ # 2. Khối comments: <# Tên script: deploy_checker.ps1 Mức độ: Bài tập về nhà Session 7 Chức năng: Quét tệp server.log, lọc bỏ lỗi CRITICAL, ghi kết quả vào tệp daily_critical.txt và đếm số dòng lỗi. #>
+ # 3. Khối thông báo tiến trình:
+ write-host "Dang tien hanh quet file server.log..."
+ # 4. Khối xử lý:
+ # Tao tieu de bat dau quet va ghi vao file dich
+ "=== Bat dau quet log: $(Get-Date) ===" | Out-File daily_critical.txt 
+# Loc cac dong loi CRITICAL (bo -CaseSensitive de khong bi lech chu hoa/thuong) Select-String -Path server.log -Pattern "CRITICAL" | Out-File -Append daily_critical.txt
+ # Tao dong tieu de tong ket so luong loi
+ "=== Hoan tat. So dong loi: ===" | Out-File -Append daily_critical.txt 
+# Dem tong so dong co trong file ket qua va ghi noi vao cuoi
+ (Get-Content daily_critical.txt).Count | Out-File -Append daily_critical.txt
+2. Kết quả mong đợi của tệp daily_critical.txt
+=== Bat dau quet log: 09/18/2026 [Giờ hệ thống] ===
+2026-09-18 02:30:11 CRITICAL Database connection pool exhausted
+2026-09-18 02:30:45 CRITICAL Retry limit exceeded for payment-service
+=== Hoan tat. So dong loi: ===
+3. Xử lý khi tệp server.log không tồn tại
+* Hành vi của hệ thống: PowerShell sẽ văng lỗi đỏ (Non-terminating error) trực tiếp tại dòng lệnh gọi Select-String do không tìm thấy đường dẫn tệp server.log.
+* Ảnh hưởng đến tệp đích: Tệp daily_critical.txt sẽ chỉ chứa dòng tiêu đề bắt đầu quét, còn phần lọc lỗi sẽ bị bỏ trống và bước đếm số dòng phía sau sẽ trả về giá trị lỗi hoặc đếm sai lệch do thiếu dữ liệu.
